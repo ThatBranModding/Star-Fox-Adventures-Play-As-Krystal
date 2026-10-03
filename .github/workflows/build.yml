@@ -1,0 +1,91 @@
+name: Build mod
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            platform: windows-amd64
+            library: mod.dll
+            configure: -A x64
+          - runner: ubuntu-24.04
+            platform: linux-amd64
+            library: mod.so
+            configure: ''
+          - runner: ubuntu-24.04-arm
+            platform: linux-arm64
+            library: mod.so
+            configure: ''
+          - runner: macos-15-intel
+            platform: macos-x86_64
+            library: mod.so
+            configure: -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          - runner: macos-15
+            platform: macos-arm64
+            library: mod.so
+            configure: -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Configure
+        shell: bash
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFH_BUILD_TESTS=ON ${{ matrix.configure }}
+      - name: Build
+        run: cmake --build build --config Release --parallel 2
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Check packaged library
+        shell: bash
+        run: test -s "build/play-as-krystal/lib/${{ matrix.platform }}/${{ matrix.library }}"
+      - name: Upload platform package
+        uses: actions/upload-artifact@v7
+        with:
+          name: play-as-krystal-${{ matrix.platform }}
+          path: build/play-as-krystal/
+          if-no-files-found: error
+
+  package:
+    name: All-platform package
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: play-as-krystal-*
+          path: dist/play-as-krystal
+          merge-multiple: true
+      - name: Verify package contents
+        shell: bash
+        run: |
+          for platform in windows-amd64 linux-amd64 linux-arm64 macos-x86_64 macos-arm64; do
+            library=mod.so
+            if [ "$platform" = windows-amd64 ]; then library=mod.dll; fi
+            test -s "dist/play-as-krystal/lib/$platform/$library"
+          done
+          for file in mod.json README.md LICENSE assets/km0 assets/kt0 overlay/streams/CRF/landing.adp overlay/streams/KP/kp1270.adp overlay/streams/TTH/landing.adp overlay/streams/TTH/tLanding.adp overlay/streams/TTH/tTakeoff.adp; do
+            test -s "dist/play-as-krystal/$file"
+          done
+      - name: Create installable archive
+        working-directory: dist
+        run: cmake -E tar cf play-as-krystal-all-platforms.zip --format=zip play-as-krystal
+      - name: Upload all-platform archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: play-as-krystal-all-platforms
+          path: dist/play-as-krystal-all-platforms.zip
+          if-no-files-found: error

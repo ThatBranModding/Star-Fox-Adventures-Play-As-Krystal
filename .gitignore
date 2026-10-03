@@ -24,3 +24,12 @@ cmake_install.cmake
 .idea/
 .DS_Store
 Thumbs.db
+__pycache__/
+
+# Local game image supplied for reference, never part of the mod package.
+/amethyst mod patched rom/
+/research/
+*.iso
+*.gcm
+*.rvz
+*.log

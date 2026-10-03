@@ -25,14 +25,6 @@ jobs:
             platform: linux-amd64
             library: mod.so
             configure: ''
-          - runner: ubuntu-24.04-arm
-            platform: linux-arm64
-            library: mod.so
-            configure: ''
-          - runner: macos-15-intel
-            platform: macos-x86_64
-            library: mod.so
-            configure: -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
           - runner: macos-15
             platform: macos-arm64
             library: mod.so
@@ -72,7 +64,7 @@ jobs:
       - name: Verify package contents
         shell: bash
         run: |
-          for platform in windows-amd64 linux-amd64 linux-arm64 macos-x86_64 macos-arm64; do
+          for platform in windows-amd64 linux-amd64 macos-arm64; do
             library=mod.so
             if [ "$platform" = windows-amd64 ]; then library=mod.dll; fi
             test -s "dist/play-as-krystal/lib/$platform/$library"

@@ -35,7 +35,7 @@ Mods that modify the player model, animations or sound playback may conflict.
 
 Licensed under the MIT License. See [LICENSE](LICENSE)
 
-## AI Assistance Disclaimer
+## AI Disclosure
 
 AI tools were used during the development of this project to assist with code generation, debugging, reverse engineering, and development iteration. All functionality was tested and reviewed by myself before release.
 

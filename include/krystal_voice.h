@@ -1,15 +1,11 @@
 #pragma once
 
-// Trigger IDs come from paired character branches in player.c, rather than
-// MusyX sample names inherited from the game's development builds. Unpaired
-// reaction triggers use existing Krystal voices as intentional fallbacks.
 struct VoiceReplacement {
     uint16_t fox;
     uint16_t krystal;
     const char* action;
     int16_t move = -1;
     int16_t alternateMove = -1;
-    bool exitWindowOnly = false;
 };
 static constexpr VoiceReplacement kVoiceReplacements[] = {
     {0x01B, 0x2D5, "defence effort (exertion fallback)"},
@@ -60,10 +56,7 @@ static SetSoundVolumeFn g_setSoundVolume{};
 static void *g_playSimpleSoundTarget{}, *g_playChannelSoundTarget{}, *g_playPositionSoundTarget{},
     *g_playLimitedSoundTarget{}, *g_stopObjectSoundTarget{}, *g_isPlayingSoundTarget{}, *g_setSoundVolumeTarget{};
 static void* g_findObjectSoundChannelTarget{};
-static bool g_loggedVoiceReplacements[sizeof(kVoiceReplacements) / sizeof(kVoiceReplacements[0])]{};
 static bool g_loggedMissingVoiceTriggers[sizeof(kVoiceReplacements) / sizeof(kVoiceReplacements[0])]{};
-static bool g_loggedUnmappedPlayerTriggers[65536]{};
-static unsigned int g_exitSoundTraceFrames = 0;
 
 static uint16_t remapPlayerVoice(void* object, uint16_t trigger, bool report) {
     void* player = g_objGetPlayerObject ? g_objGetPlayerObject() : nullptr;
@@ -76,11 +69,10 @@ static uint16_t remapPlayerVoice(void* object, uint16_t trigger, bool report) {
     for (size_t i = 0; i < sizeof(kVoiceReplacements) / sizeof(kVoiceReplacements[0]); ++i) {
         const auto& replacement = kVoiceReplacements[i];
         if (trigger != replacement.fox) continue;
-        if (replacement.exitWindowOnly && (object || !g_exitSoundTraceFrames)) continue;
         if (replacement.move >= 0 &&
             *reinterpret_cast<const int16_t*>(bytes + 0xE0) != replacement.move &&
             *reinterpret_cast<const int16_t*>(bytes + 0xE0) != replacement.alternateMove) continue;
-        // If this build lacks the replacement trigger, retain the original.
+
         if (!g_findSoundTrigger || !g_findSoundTrigger(replacement.krystal)) {
             if (report && !g_loggedMissingVoiceTriggers[i]) {
                 g_loggedMissingVoiceTriggers[i] = true;
@@ -91,81 +83,25 @@ static uint16_t remapPlayerVoice(void* object, uint16_t trigger, bool report) {
             }
             return trigger;
         }
-        if (report && !g_loggedVoiceReplacements[i]) {
-            g_loggedVoiceReplacements[i] = true;
-            char message[192];
-            std::snprintf(message, sizeof(message), "Krystal voice: %s remapped Fox 0x%X -> Krystal 0x%X.",
-                replacement.action, trigger, replacement.krystal);
-            log(FH_LOG_INFO, message);
-        }
         return replacement.krystal;
-    }
-    if (report && !g_loggedUnmappedPlayerTriggers[trigger]) {
-        g_loggedUnmappedPlayerTriggers[trigger] = true;
-        char message[160];
-        const int move = *reinterpret_cast<const int16_t*>(bytes + 0xE0);
-        std::snprintf(message, sizeof(message), "Krystal voice: unmapped player sound 0x%X during move 0x%X.",
-            trigger, static_cast<unsigned int>(static_cast<uint16_t>(move)));
-        log(FH_LOG_INFO, message);
     }
     return trigger;
 }
 
-struct ExitSoundTraceEntry {
-    void* owner;
-    uint32_t channel;
-    uint16_t trigger;
-    int16_t playerMove;
-    int16_t ownerMove;
-};
-static ExitSoundTraceEntry g_exitSoundTrace[512]{};
-static size_t g_exitSoundTraceCount = 0;
-
-static void traceExitSound(void* object, uint32_t channel, uint16_t trigger) {
-    void* player = g_objGetPlayerObject ? g_objGetPlayerObject() : nullptr;
-    if (krystalGameplayActive(player)) {
-        const auto* bytes = static_cast<const uint8_t*>(player);
-        const int16_t move = *reinterpret_cast<const int16_t*>(bytes + 0xE0);
-        if (move == 0x262 || move == 0x263) g_exitSoundTraceFrames = 600;
-        if (!g_exitSoundTraceFrames || g_exitSoundTraceCount >= 512) return;
-        const int16_t ownerMove = object ?
-            *reinterpret_cast<const int16_t*>(static_cast<const uint8_t*>(object) + 0xE0) : -1;
-        for (size_t i = 0; i < g_exitSoundTraceCount; ++i) {
-            const auto& entry = g_exitSoundTrace[i];
-            if (entry.owner == object && entry.channel == channel && entry.trigger == trigger &&
-                entry.playerMove == move && entry.ownerMove == ownerMove) return;
-        }
-        g_exitSoundTrace[g_exitSoundTraceCount++] = {object, channel, trigger, move, ownerMove};
-        char message[256];
-        std::snprintf(message, sizeof(message),
-            "Arwing sound trace v2: move=0x%X trigger=0x%X owner=%s ptr=%p ownerMove=0x%X channel=0x%X playerBank=%d.",
-            static_cast<unsigned int>(static_cast<uint16_t>(move)), trigger,
-            object == player ? "player" : object ? "other" : "null", object,
-            static_cast<unsigned int>(static_cast<uint16_t>(ownerMove)), channel,
-            static_cast<int>(*reinterpret_cast<const int8_t*>(bytes + OBJ_BANK_INDEX_OFFSET)));
-        log(FH_LOG_INFO, message);
-    }
-}
-
 static void playObjectSoundExHook(void* object, void* position, uint32_t channel, uint16_t trigger) {
-    traceExitSound(object, channel, trigger);
     g_playObjectSoundEx(object, position, channel, remapPlayerVoice(object, trigger, true));
 }
 
 static void playSimpleSoundHook(void* object, uint16_t trigger) {
-    traceExitSound(object, 0, trigger);
     g_playSimpleSound(object, remapPlayerVoice(object, trigger, true));
 }
 static void playChannelSoundHook(void* object, uint32_t channel, uint16_t trigger) {
-    traceExitSound(object, channel, trigger);
     g_playChannelSound(object, channel, remapPlayerVoice(object, trigger, true));
 }
 static void playPositionSoundHook(void* object, float x, float y, float z, uint16_t trigger) {
-    traceExitSound(object, 0, trigger);
     g_playPositionSound(object, x, y, z, remapPlayerVoice(object, trigger, true));
 }
 static uint32_t playLimitedSoundHook(void* object, uint16_t trigger, int limit) {
-    traceExitSound(object, 0, trigger);
     return g_playLimitedSound(object, remapPlayerVoice(object, trigger, true), limit);
 }
 static void stopObjectSoundHook(void* object, uint16_t trigger) {
@@ -179,8 +115,7 @@ static void setSoundVolumeHook(void* object, uint16_t trigger, uint8_t volume, f
 }
 
 static void* findObjectSoundChannelHook(void* object, uint32_t channel, uint16_t trigger, int32_t mode) {
-    // Stop, is-playing, volume and duplicate checks must use the same trigger
-    // as playback, otherwise the game's falling-voice lifecycle breaks.
+
     return g_findObjectSoundChannel(object, channel, remapPlayerVoice(object, trigger, false), mode);
 }
 
@@ -225,8 +160,7 @@ static const int32_t* g_landingStreamCount{};
 
 static void updateArwingLandingVoice() {
     if (!g_arwingAudioReady) return;
-    // GetCurrentId returns a one-based table slot, not the recording ID
-    // supplied to AudioStream_Play. Resolve it through the native table.
+
     const int32_t slot = g_currentStreamId();
     const auto* entries = g_landingStreamEntries ? *g_landingStreamEntries : nullptr;
     const int32_t count = g_landingStreamCount ? *g_landingStreamCount : 0;
@@ -305,20 +239,5 @@ static bool initializeArwingLandingVoice() {
 }
 
 static int playAudioStreamHook(int id, void (*preparedCallback)()) {
-    // Sequence speech can be streamed rather than played as an object SFX.
-    // Observe this separate route without changing playback or callbacks.
-    static unsigned int streamTraceCount = 0;
-    if (streamTraceCount < 256) {
-        ++streamTraceCount;
-        void* player = g_objGetPlayerObject ? g_objGetPlayerObject() : nullptr;
-        const int move = player ? *reinterpret_cast<const int16_t*>(
-            static_cast<const uint8_t*>(player) + 0xE0) : -1;
-        char message[192];
-        std::snprintf(message, sizeof(message),
-            "Arwing stream trace: stream=%d (0x%X) playerMove=0x%X exitWindow=%s.",
-            id, static_cast<unsigned int>(id),
-            static_cast<unsigned int>(static_cast<uint16_t>(move)), g_exitSoundTraceFrames ? "yes" : "no");
-        log(FH_LOG_INFO, message);
-    }
     return g_playAudioStream(id, preparedCallback);
 }

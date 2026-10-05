@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <cmath>
 #include "model_layout.h"
 
 static FhMod* g_mod{};
@@ -52,6 +53,9 @@ static PlayerStaffInitFn g_playerStaffInit{};
 static ObjIsCurModelNotZeroFn g_objIsCurModelNotZero{};
 static ObjGetPlayerObjectFn g_objGetPlayerObject{};
 static ObjBuildWorldTransformMatrixFn g_objBuildWorldTransformMatrix{};
+using UpdateAnimMatricesFn = void (*)(void*, void*, void*, float*);
+static UpdateAnimMatricesFn g_updateAnimMatrices{};
+static void* g_updateAnimMatricesTarget{};
 static uint8_t (*g_saveCharacter)(){};
 static uint8_t** g_storySaveData{};
 static uint32_t (*g_mainGetBit)(int){};
@@ -142,16 +146,52 @@ static constexpr uint32_t kTextureData[KRYSTAL_TEXTURE_COUNT] = {
     0x8100D230u, 0x8100D5C0u, 0x8100D710u,
 };
 
-// Foxhollow v1.0.5 native x86-64 layouts.
 static constexpr size_t OBJ_MODEL_BANKS_OFFSET = 0xB8;
 static constexpr size_t MODEL_FILE_OFFSET = 0x00;
 static constexpr size_t HDR_MODEL_ID_OFFSET = 0x04;
 static constexpr size_t HDR_ANIM_IDS_OFFSET = 0xB0;
 static constexpr size_t HDR_ANIM_IDXS_OFFSET = 0xB8;
 static constexpr size_t HDR_ANIM_IDXS_SIZE = 0x14;
-// Native x86-64 ObjAnimComponent: verified from Foxhollow layout (modelBanks=0xB8).
+
 static constexpr size_t OBJ_BANK_INDEX_OFFSET = 0xF5;
-static constexpr float KRYSTAL_HEIGHT_SCALE = 0.865f;
+
+static constexpr float KRYSTAL_CHEST_HEIGHT_SCALE = 0.74f;
+static constexpr float KRYSTAL_CHEST_REACH_SCALE = 0.98f;
+static constexpr float KRYSTAL_PORTAL_HEIGHT_SCALE = 0.85f;
+static constexpr float KRYSTAL_CUTSCENE_HEIGHT_SCALE = 0.865f;
+static float g_foxRootBindHeight{};
+static bool g_foxRootBindHeightValid{};
+static void* g_chestHeightPlayer{};
+static float* g_heightTimeDelta{};
+static uint8_t* g_heightPause{};
+static void* g_portalHeightPlayer{};
+static float g_portalHeightHoldFrames{};
+static void updatePortalHeightHold() {
+    void* obj = g_objGetPlayerObject ? g_objGetPlayerObject() : nullptr;
+    if (g_chestHeightPlayer && (obj != g_chestHeightPlayer || !krystalGameplayActive(obj) || !playerSequenceActive(obj)))
+        g_chestHeightPlayer = nullptr;
+    if (!obj || !krystalGameplayActive(obj) ||
+        *reinterpret_cast<const int8_t*>(static_cast<const uint8_t*>(obj) + OBJ_BANK_INDEX_OFFSET) != 0) {
+        g_portalHeightPlayer = nullptr;
+        g_portalHeightHoldFrames = 0;
+        return;
+    }
+    if (obj != g_portalHeightPlayer) {
+        g_portalHeightPlayer = obj;
+        g_portalHeightHoldFrames = 0;
+    }
+    const int16_t move = *reinterpret_cast<const int16_t*>(static_cast<const uint8_t*>(obj) + 0xE0);
+    if (move == 0x250 && playerSequenceActive(obj)) g_chestHeightPlayer = obj;
+    if (move == 0x27F) g_portalHeightHoldFrames = 120.0f;
+    else if (g_portalHeightHoldFrames > 0 && (!g_heightPause || !*g_heightPause)) {
+
+        const float delta = g_heightTimeDelta ? *g_heightTimeDelta : 1.0f;
+        if (delta > 0) {
+            g_portalHeightHoldFrames -= delta;
+            if (g_portalHeightHoldFrames < 0) g_portalHeightHoldFrames = 0;
+        }
+    }
+}
 
 struct NativeSphereDef {
     int16_t joint;
@@ -228,8 +268,7 @@ static void updateHitSpheresHook(uint8_t* modelBytes, uint8_t* headerBytes, uint
     const bool use12 = eligible && getAttackDefinition(obj, model, 12, donor12);
     const bool use16 = eligible && getAttackDefinition(obj, model, 16, donor16);
     if (use12 || use16) {
-        // Pass a private header and definitions for this evaluation only. The
-        // model's shared header, sphere count, and allocated buffers stay intact.
+
         NativeModelHeader header = *model->file;
         NativeSphereDef defs[64];
         std::memcpy(defs, header.hitVolumes, header.hitVolumeCount * sizeof(NativeSphereDef));
@@ -292,11 +331,7 @@ static bool loadInjectedAssets() {
 
 static void initSyntheticKrystalTextureTable() {
     if (!g_syntheticTex1Tab.empty()) return;
-    // Foxhollow's map-local TEX1 banks can be much smaller than Krystal's
-    // retail IDs (0x724-0x72A). textureLoad() clamps an ID to slot 0 BEFORE it
-    // reloads the bank table, which is why 0.8.7/0.9.2 rendered psychedelic
-    // textures. Give only Krystal's six TEX1 requests a private table large
-    // enough to preserve those literal IDs; never write past the map's table.
+
     g_syntheticTex1Tab.assign(0x72E, 0);
     for (int i = 0; i < KRYSTAL_TEXTURE_COUNT; ++i)
         g_syntheticTex1Tab[KRYSTAL_TEXTURE_ID + i] = static_cast<int32_t>(kTextureData[i]);
@@ -313,7 +348,7 @@ static void* getCurrentDataFileHook(int fileId) {
 
 static int getTableFileEntryHook(int fileId, int index, int* out) {
     if (g_loadingKrystalModel && fileId == MLDF_MODELS_TAB_A && index == KRYSTAL_MODEL_ID && out && loadInjectedAssets()) {
-        // The real offset is irrelevant: loadModelsBinHook/loadAndDecompressHook source km0 directly.
+
         *out = 0;
         return 1;
     }
@@ -429,8 +464,7 @@ static void* textureLoadHook(int texId, uint8_t flagIn) {
         int oldCount = 0;
         if (g_texBankCount) {
             oldCount = g_texBankCount[1];
-            // This value is consulted before loadTextureBank(). Keep the real
-            // 0x724-0x72A ID from being clamped to slot zero.
+
             g_texBankCount[1] = 0x72D;
         }
         void* result = g_textureLoad ? g_textureLoad(texId, flagIn) : nullptr;
@@ -461,8 +495,6 @@ static int modelListGetHeaderHook(void* list, int index, void* outHeader) {
     return result;
 }
 
-// Own the mapping: cutscene actors can outlive the player instance that donated
-// it. Geometry, joint layout and animation buffers remain Krystal's.
 static std::vector<int16_t> g_foxAnimationIds;
 static int16_t g_foxAnimationGroups[8]{};
 static int32_t g_foxAnimationOffset{};
@@ -480,12 +512,15 @@ static bool ensureFoxAnimationMapping() {
     const bool valid = fox->modelId == 1 && fox->cachedAnimIds &&
         (fox->flags & 0x40) && fox->animationCount > 0 && fox->animationCount < 1020;
     if (valid) {
+        if (fox->jointData) {
+            std::memcpy(&g_foxRootBindHeight, fox->jointData + 8, sizeof(float));
+            g_foxRootBindHeightValid = std::isfinite(g_foxRootBindHeight);
+        }
         g_foxAnimationIds.assign(fox->cachedAnimIds, fox->cachedAnimIds + fox->animationCount);
         std::memcpy(g_foxAnimationGroups, fox->animGroupBaseIndices, sizeof(g_foxAnimationGroups));
         g_foxAnimationOffset = fox->animationDataFileOffset;
     }
-    // ObjModel_Load acquires a header reference. Release it through the native
-    // model API using an empty instance, with no per-instance allocations.
+
     alignas(8) uint8_t reference[0x120]{};
     *reinterpret_cast<NativeModelHeader**>(reference) = fox;
     g_modelRelease(reference);
@@ -497,8 +532,7 @@ static void applyFoxAnimationMapping(NativeModelHeader* header) {
     std::memcpy(header->animGroupBaseIndices, g_foxAnimationGroups, sizeof(g_foxAnimationGroups));
     header->animationDataFileOffset = g_foxAnimationOffset;
     header->cachedAnimIds = g_foxAnimationIds.data();
-    // This header uses a cached ID table, not an allocated array of animation
-    // pointers. The replacement table owns every entry in the Fox count.
+
     header->animationCount = static_cast<uint16_t>(g_foxAnimationIds.size());
 }
 
@@ -509,8 +543,7 @@ static void* loadObjectFileHook(int id) {
     auto* models = *reinterpret_cast<int32_t**>(bytes + 8);
     const int8_t count = *reinterpret_cast<int8_t*>(bytes + 0x91);
     if (count == 1 && models && (models[0] == 1 || models[0] == KRYSTAL_MODEL_ID)) {
-        // AnimFox/AnimFoxLink keep their original scripts, events and category.
-        // Restore cached definitions when the native prologue loads them.
+
         models[0] = krystalInjectionAllowed() ? KRYSTAL_MODEL_ID : 1;
         if (models[0] == KRYSTAL_MODEL_ID && !g_loggedCutsceneActor) {
             g_loggedCutsceneActor = true;
@@ -524,9 +557,7 @@ static void* loadAnimationHook(NativeModelHeader* header, int16_t id, int bank, 
     if (!g_loadAnimation) return nullptr;
     if (isFoxCampaign() && header) {
         for (void* injected : g_injectedKrystalHeaders) if (header == injected) {
-            // Fox-only sequence resource packs reject other model IDs before
-            // loading an animation. Only this call sees the Fox identity.
-            // animLoadFromTable reads the header synchronously; no pointer escapes.
+
             NativeModelHeader animationHeader = *header;
             animationHeader.modelId = 1;
             void* result = g_loadAnimation(&animationHeader, id, bank, output);
@@ -558,8 +589,7 @@ static void resetAnimationHook(void* model, void* state) {
     auto* header = model ? *reinterpret_cast<NativeModelHeader**>(model) : nullptr;
     if (isFoxCampaign() && header) {
         for (void* injected : g_injectedKrystalHeaders) if (header == injected) {
-            // modelAnimResetState has its own Fox-only initial-cache gate and
-            // reads only the instance's file field. It retains neither pointer.
+
             NativeModelHeader animationHeader = *header;
             animationHeader.modelId = 1;
             NativeModel animationModel{};
@@ -634,23 +664,15 @@ static bool copyFoxAnimationMapToKrystal(void* obj) {
     return true;
 }
 
-// Foxhollow uses bankIndex==0 as a legacy "Krystal" capability gate in a
-// handful of player systems. Keep Krystal visually in bank 0, but make those
-// capability checks see the Fox-capable player.
 static int objIsCurModelNotZeroHook(void* obj) {
     if (krystalStaffActive(obj) && g_objGetPlayerObject && obj == g_objGetPlayerObject()) return 1;
     return g_objIsCurModelNotZero ? g_objIsCurModelNotZero(obj) : 0;
 }
 
-// playerStaffInit contains its own direct bankIndex!=0 check and disables the
-// staff every update for bank 0. Temporarily expose bank 1 only to that check;
-// the rendered/active model remains Krystal before and after the call.
 static void playerStaffInitHook(void* obj, void* state) {
     if (!g_playerStaffInit) return;
     if (krystalGameplayActive(obj)) g_staffGameplayReady = staffPickupComplete();
-    // The pickup script controls the staff prop during the sequence. Prevent
-    // the legacy bank-zero check from removing it again after acquisition.
-    // Player capabilities remain locked by krystalStaffActive until completion.
+
     if (!krystalGameplayActive(obj) || !staffPickupComplete() ||
         (g_objGetPlayerObject && obj != g_objGetPlayerObject())) {
         g_playerStaffInit(obj, state);
@@ -663,26 +685,43 @@ static void playerStaffInitHook(void* obj, void* state) {
     *bank = saved;
 }
 
+#include "chest_alignment.h"
+
+static void updateAnimMatricesHook(void* model, void* header, void* obj, float* matrix) {
+    chestPoseMatrices(model, header, obj, matrix);
+}
+
 static void objBuildWorldTransformMatrixHook(void* obj, float* mtx, int flags) {
     if (!g_objBuildWorldTransformMatrix) return;
     g_objBuildWorldTransformMatrix(obj, mtx, flags);
 
-    // Krystal is slightly taller than Fox, while all gameplay/interaction
-    // coordinates still come from the Fox actor. Scale only the 3x3 basis of
-    // the player's Krystal world matrix around the actor origin. Translation
-    // remains untouched, so collision, floor position and gameplay coordinates
-    // stay exactly where vanilla Fox expects them. Temporary model banks (e.g.
-    // SharpClaw disguise) are deliberately not scaled.
-    if (!krystalGameplayActive(obj) || !mtx || !g_objGetPlayerObject || obj != g_objGetPlayerObject()) return;
+    if (!obj || !mtx || !isFoxCampaign()) return;
+    const bool gameplayPlayer = krystalGameplayActive(obj) && g_objGetPlayerObject && obj == g_objGetPlayerObject();
+    const bool cutscene = playerSequenceActive(obj);
+
+    if (!gameplayPlayer && !(cutscene && playerHasInjectedKrystal(obj))) return;
     const auto* bank = reinterpret_cast<const int8_t*>(reinterpret_cast<const uint8_t*>(obj) + OBJ_BANK_INDEX_OFFSET);
     if (*bank != 0) return;
 
-    mtx[1] *= KRYSTAL_HEIGHT_SCALE;
-    mtx[5] *= KRYSTAL_HEIGHT_SCALE;
-    mtx[9] *= KRYSTAL_HEIGHT_SCALE;
+    const int16_t move = *reinterpret_cast<const int16_t*>(reinterpret_cast<const uint8_t*>(obj) + 0xE0);
+    float height = KRYSTAL_CUTSCENE_HEIGHT_SCALE;
+    const bool chest = move == 0x250 || (obj == g_chestHeightPlayer && cutscene);
+    if (chest) height = KRYSTAL_CHEST_HEIGHT_SCALE;
+    else if (move == 0x27F || (obj == g_portalHeightPlayer && g_portalHeightHoldFrames > 0))
+        height = KRYSTAL_PORTAL_HEIGHT_SCALE;
+    if (height == 1.0f) return;
+    mtx[1] *= height;
+    mtx[5] *= height;
+    mtx[9] *= height;
+    if (chest) {
+        for (int i : {0, 2, 4, 6, 8, 10}) mtx[i] *= KRYSTAL_CHEST_REACH_SCALE;
+    }
 }
 
 static void playerInitHook(void* obj) {
+    g_chestHeightPlayer = nullptr;
+    g_portalHeightPlayer = nullptr;
+    g_portalHeightHoldFrames = 0;
     g_gameplayPlayer = nullptr;
     g_staffGameplayReady = false;
     if (g_playerInit) g_playerInit(obj);
@@ -714,12 +753,15 @@ static bool installHook(const char* symbol, void* replacement, void** targetOut,
 }
 
 #include "krystal_voice.h"
+#include "gas_meter_portrait.h"
 #include "rich_presence_compat.h"
-
+#include "wall_root_motion.h"
 
 extern "C" FH_MOD_EXPORT int fh_mod_initialize(FhMod* mod, const FhModHost* host) {
     if (!mod || !host || host->abiVersion != FH_MOD_ABI_VERSION || !host->symbolAddress || !host->hookInstall) return FH_MOD_ERROR;
     g_mod = mod; g_host = host;
+    g_heightTimeDelta = reinterpret_cast<float*>(host->symbolAddress(mod, "timeDelta"));
+    g_heightPause = reinterpret_cast<uint8_t*>(host->symbolAddress(mod, "pauseMenuState"));
     g_getCurrentDataFile = reinterpret_cast<GetCurrentDataFileFn>(host->symbolAddress(mod, "getCurrentDataFile"));
     g_texBankCount = reinterpret_cast<int*>(host->symbolAddress(mod, "gRcpTexBankCount"));
     g_zlbDecompress = reinterpret_cast<ZlbDecompressFn>(host->symbolAddress(mod, "zlbDecompress"));
@@ -772,37 +814,39 @@ extern "C" FH_MOD_EXPORT int fh_mod_initialize(FhMod* mod, const FhModHost* host
     HOOK("Sfx_FindObjectChannel", findObjectSoundChannelHook, g_findObjectSoundChannelTarget, g_findObjectSoundChannel, FindObjectSoundChannelFn);
 #undef HOOK
     original = nullptr;
+    g_chestPointMatrix = reinterpret_cast<ChestPointMatrixFn>(host->symbolAddress(mod, "ObjPath_GetPointModelMtx"));
+    if (installHook("ObjModel_UpdateAnimMatrices", reinterpret_cast<void*>(updateAnimMatricesHook), &g_updateAnimMatricesTarget, &original)) {
+        g_updateAnimMatrices = reinterpret_cast<UpdateAnimMatricesFn>(original);
+        log(FH_LOG_INFO, g_chestPointMatrix ? "Chest alignment enabled." : "Chest pose alignment unavailable: attachment matrix symbol missing.");
+    }
+    original = nullptr;
     if (installHook("AudioStream_Play", reinterpret_cast<void*>(playAudioStreamHook), &g_playAudioStreamTarget, &original)) {
         g_playAudioStream = reinterpret_cast<PlayAudioStreamFn>(original);
-        log(FH_LOG_INFO, "Arwing stream trace enabled.");
         const bool arwingReady = initializeArwingLandingVoice();
         log(arwingReady ? FH_LOG_INFO : FH_LOG_WARN,
             arwingReady ? "Krystal Arwing stream replacement enabled: per-recording landing cues, ledge-jump voice 0x398; background retained by audio overlays." :
                 "Krystal Arwing stream replacement unavailable: audio clock/table symbols or edited audio overlay missing.");
     } else {
-        log(FH_LOG_WARN, "Arwing stream trace unavailable: AudioStream_Play hook could not be installed.");
+        log(FH_LOG_WARN, "Arwing voice replacement unavailable: AudioStream_Play hook could not be installed.");
     }
 
-    log(FH_LOG_INFO, "Play As Krystal  0.9.7 loaded: Fox gameplay actor + Krystal visuals + Fox capability gates (staff/PDA/map/full staff ability suite + 86.5% Krystal height-only scale).");
+    initializeWallRootMotion();
+    initializePortraitSprite();
+    log(FH_LOG_INFO, "Play As Krystal  0.9.7 loaded: gameplay/cutscene height 86.5%, chest insertion/dialogue 74%, portal insertion 85% with two-second hold; climbing travel/anchor correction and reliable finish.");
     char voiceSummary[192];
     std::snprintf(voiceSummary, sizeof(voiceSummary),
         "Krystal voice replacements loaded: %zu gameplay vocal mappings (paired clips and fallbacks); existing attack corrections active.",
         sizeof(kVoiceReplacements) / sizeof(kVoiceReplacements[0]));
     log(FH_LOG_INFO, voiceSummary);
-    log(FH_LOG_INFO, "Krystal build: release-prep-v21; staff diagnostics removed; v18 cutscene/model/staff behavior retained; native object-sound entry points replace voices before Cutscene Skip playback; stop/check/volume IDs matched; Arwing cues retained.");
     return FH_MOD_OK;
 }
 
 extern "C" FH_MOD_EXPORT void fh_mod_update(FhMod*) {
-    if (g_exitSoundTraceFrames) --g_exitSoundTraceFrames;
+    updatePortalHeightHold();
     static unsigned int presenceRetry = 0;
     if (presenceRetry++ % 120 == 0) notifyKrystalRichPresence(krystalGameplayActive(g_gameplayPlayer));
     updateArwingLandingVoice();
-    // Vanilla temporary player-model states (notably the SharpClaw disguise)
-    // restore the player to Fox by selecting model bank 1 when they finish.
-    // Our gameplay actor is intentionally still Fox, but its normal visible
-    // bank is Krystal (0). Leave every non-Fox temporary bank untouched and
-    // only redirect an attempted return to the ordinary Fox bank.
+
     if (!g_objGetPlayerObject || !g_setModel) return;
     void* obj = g_objGetPlayerObject();
     if (!obj) { g_gameplayPlayer = nullptr; g_staffGameplayReady = false; return; }
@@ -828,6 +872,11 @@ extern "C" FH_MOD_EXPORT void fh_mod_update(FhMod*) {
     }
 }
 extern "C" FH_MOD_EXPORT void fh_mod_shutdown(FhMod*) {
+    shutdownPortraitSprite();
+    shutdownWallRootMotion();
+    g_chestHeightPlayer = nullptr;
+    g_portalHeightPlayer = nullptr;
+    g_portalHeightHoldFrames = 0;
     notifyKrystalRichPresence(false);
     g_arwingAudioReady = false;
     if (g_host && g_host->hookRemove) {
@@ -847,6 +896,7 @@ extern "C" FH_MOD_EXPORT void fh_mod_shutdown(FhMod*) {
         if (g_setSoundVolumeTarget) g_host->hookRemove(g_mod, g_setSoundVolumeTarget);
         if (g_updateHitSpheresTarget) g_host->hookRemove(g_mod, g_updateHitSpheresTarget);
         if (g_objBuildWorldTransformMatrixTarget) g_host->hookRemove(g_mod, g_objBuildWorldTransformMatrixTarget);
+        if (g_updateAnimMatricesTarget) g_host->hookRemove(g_mod, g_updateAnimMatricesTarget);
         if (g_playerInitTarget) g_host->hookRemove(g_mod, g_playerInitTarget);
         if (g_objIsCurModelNotZeroTarget) g_host->hookRemove(g_mod, g_objIsCurModelNotZeroTarget);
         if (g_playerStaffInitTarget) g_host->hookRemove(g_mod, g_playerStaffInitTarget);

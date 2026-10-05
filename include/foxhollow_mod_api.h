@@ -18,9 +18,6 @@ extern "C" {
 #define FH_MOD_EXPORT __attribute__((visibility("default")))
 #endif
 
-/* Declares a symbol that lives in the host executable. Windows reaches exported
-   data only through an import thunk, so the declaration has to say so; the ELF
-   and Mach-O linkers resolve it from the host image without any marker. */
 #if defined(_WIN32)
 #define FH_MOD_IMPORT __declspec(dllimport)
 #else
@@ -74,4 +71,4 @@ typedef void (*FhModShutdownFn)(FhMod* mod);
 }
 #endif
 
-#endif /* FOXHOLLOW_MOD_API_H_ */
+#endif

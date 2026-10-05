@@ -9,7 +9,6 @@
 #include <dlfcn.h>
 #endif
 
-// Resolve only the already-loaded companion mod; never load another DLL.
 static void notifyKrystalRichPresence(bool enabled) {
     if (!g_host || !g_host->modDir) return;
     const char* directory = g_host->modDir(g_mod);

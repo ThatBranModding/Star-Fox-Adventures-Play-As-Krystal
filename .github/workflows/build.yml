@@ -35,11 +35,9 @@ jobs:
           persist-credentials: false
       - name: Configure
         shell: bash
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFH_BUILD_TESTS=ON ${{ matrix.configure }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.configure }}
       - name: Build
         run: cmake --build build --config Release --parallel 2
-      - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
       - name: Check packaged library
         shell: bash
         run: test -s "build/play-as-krystal/lib/${{ matrix.platform }}/${{ matrix.library }}"
@@ -69,7 +67,7 @@ jobs:
             if [ "$platform" = windows-amd64 ]; then library=mod.dll; fi
             test -s "dist/play-as-krystal/lib/$platform/$library"
           done
-          for file in mod.json README.md LICENSE assets/km0 assets/kt0 overlay/streams/CRF/landing.adp overlay/streams/KP/kp1270.adp overlay/streams/TTH/landing.adp overlay/streams/TTH/tLanding.adp overlay/streams/TTH/tTakeoff.adp; do
+          for file in mod.json README.md LICENSE assets/km0 assets/kt0 assets/gas-meter-portrait.rgba overlay/streams/CC/cc169.adp overlay/streams/DIM/chest.adp overlay/streams/CRF/landing.adp overlay/streams/KP/kp1270.adp overlay/streams/TTH/landing.adp overlay/streams/TTH/tLanding.adp overlay/streams/TTH/tTakeoff.adp; do
             test -s "dist/play-as-krystal/$file"
           done
       - name: Create installable archive

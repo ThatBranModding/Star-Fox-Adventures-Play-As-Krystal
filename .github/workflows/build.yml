@@ -44,8 +44,18 @@ jobs:
       - name: Upload platform package
         uses: actions/upload-artifact@v7
         with:
-          name: play-as-krystal-${{ matrix.platform }}
+          name: play-as-krystal-native-${{ matrix.platform }}
           path: build/play-as-krystal/
+          if-no-files-found: error
+      - name: Create platform Foxhollow bundle
+        working-directory: build/play-as-krystal
+        run: cmake -E tar cf ../play-as-krystal-${{ matrix.platform }}.fox --format=zip mod.json assets overlay lib README.md LICENSE
+      - name: Upload platform Foxhollow bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: play-as-krystal-fox-${{ matrix.platform }}
+          path: build/play-as-krystal-${{ matrix.platform }}.fox
+          compression-level: 0
           if-no-files-found: error
 
   package:
@@ -56,7 +66,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: play-as-krystal-*
+          pattern: play-as-krystal-native-*
           path: dist/play-as-krystal
           merge-multiple: true
       - name: Verify package contents
@@ -78,4 +88,15 @@ jobs:
         with:
           name: play-as-krystal-all-platforms
           path: dist/play-as-krystal-all-platforms.zip
+          compression-level: 0
+          if-no-files-found: error
+      - name: Create all-platform Foxhollow bundle
+        working-directory: dist/play-as-krystal
+        run: cmake -E tar cf ../play-as-krystal-all-platforms.fox --format=zip mod.json assets overlay lib README.md LICENSE
+      - name: Upload all-platform Foxhollow bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: play-as-krystal-all-platforms-fox
+          path: dist/play-as-krystal-all-platforms.fox
+          compression-level: 0
           if-no-files-found: error

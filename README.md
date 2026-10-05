@@ -21,6 +21,7 @@ A mod for **Foxhollow**, the native PC port of **Star Fox Adventures**, that let
 ## Voice Replacements
 
 The mod uses existing Krystal voice recordings from the game to replace the underlying fox character. Some sounds use a suitable alternative where an exact equivalent is unavailable.
+
 Cutscene spoken dialogue and the voicelines for "Stay, Ball and Flame" tricky commands remain as there is no suitable replacements for Krystal.
 
 ## Compatibility

@@ -1,4 +1,4 @@
-# Play As Krystal
+# Star Fox Adventures: Play As Krystal Mod
 
 A mod for **Foxhollow**, the native PC port of **Star Fox Adventures**, that lets you play as everyones favourite blue vixen Krystal throughout the entire game.
 

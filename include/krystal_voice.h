@@ -65,7 +65,8 @@ static uint16_t remapPlayerVoice(void* object, uint16_t trigger, bool report) {
     const auto* bytes = static_cast<const uint8_t*>(player);
     auto banks = *reinterpret_cast<NativeModel* const* const*>(bytes + OBJ_MODEL_BANKS_OFFSET);
     if (!banks || !banks[0] || !banks[0]->file || banks[0]->file->modelId != KRYSTAL_MODEL_ID) return trigger;
-    if (*reinterpret_cast<const int8_t*>(bytes + OBJ_BANK_INDEX_OFFSET) != 0) return trigger;
+    const int8_t bank = *reinterpret_cast<const int8_t*>(bytes + OBJ_BANK_INDEX_OFFSET);
+    if (bank != 0 && (bank != 2 || !g_mainGetBit || !g_mainGetBit(0xC30))) return trigger;
     for (size_t i = 0; i < sizeof(kVoiceReplacements) / sizeof(kVoiceReplacements[0]); ++i) {
         const auto& replacement = kVoiceReplacements[i];
         if (trigger != replacement.fox) continue;

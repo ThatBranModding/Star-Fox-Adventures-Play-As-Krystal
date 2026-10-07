@@ -1,12 +1,16 @@
-name: Build mod
+name: Build Windows, macOS and Linux
 
 on:
-  push:
-  pull_request:
-  workflow_dispatch:
+  push: {}
+  pull_request: {}
+  workflow_dispatch: {}
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build:
@@ -28,34 +32,27 @@ jobs:
           - runner: macos-15
             platform: macos-arm64
             library: mod.so
-            configure: -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+            configure: >-
+              -DCMAKE_OSX_ARCHITECTURES=arm64
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Configure
-        shell: bash
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.configure }}
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          ${{ matrix.configure }}
       - name: Build
         run: cmake --build build --config Release --parallel 2
       - name: Check packaged library
-        shell: bash
         run: test -s "build/play-as-krystal/lib/${{ matrix.platform }}/${{ matrix.library }}"
       - name: Upload platform package
         uses: actions/upload-artifact@v7
         with:
           name: play-as-krystal-native-${{ matrix.platform }}
           path: build/play-as-krystal/
-          if-no-files-found: error
-      - name: Create platform Foxhollow bundle
-        working-directory: build/play-as-krystal
-        run: cmake -E tar cf ../play-as-krystal-${{ matrix.platform }}.fox --format=zip mod.json assets overlay lib README.md LICENSE
-      - name: Upload platform Foxhollow bundle
-        uses: actions/upload-artifact@v7
-        with:
-          name: play-as-krystal-fox-${{ matrix.platform }}
-          path: build/play-as-krystal-${{ matrix.platform }}.fox
-          compression-level: 0
           if-no-files-found: error
 
   package:
@@ -70,29 +67,39 @@ jobs:
           path: dist/play-as-krystal
           merge-multiple: true
       - name: Verify package contents
-        shell: bash
         run: |
           for platform in windows-amd64 linux-amd64 macos-arm64; do
             library=mod.so
-            if [ "$platform" = windows-amd64 ]; then library=mod.dll; fi
+            if [ "$platform" = windows-amd64 ]; then
+              library=mod.dll
+            fi
             test -s "dist/play-as-krystal/lib/$platform/$library"
           done
-          for file in mod.json README.md LICENSE assets/km0 assets/kt0 assets/gas-meter-portrait.rgba overlay/streams/CC/cc169.adp overlay/streams/DIM/chest.adp overlay/streams/CRF/landing.adp overlay/streams/KP/kp1270.adp overlay/streams/TTH/landing.adp overlay/streams/TTH/tLanding.adp overlay/streams/TTH/tTakeoff.adp; do
+
+          files=(
+            mod.json
+            README.md
+            LICENSE
+            assets/km0
+            assets/kt0
+            assets/gas-meter-portrait.rgba
+            overlay/streams/CC/cc169.adp
+            overlay/streams/DIM/chest.adp
+            overlay/streams/CRF/landing.adp
+            overlay/streams/KP/kp1270.adp
+            overlay/streams/TTH/landing.adp
+            overlay/streams/TTH/tLanding.adp
+            overlay/streams/TTH/tTakeoff.adp
+          )
+
+          for file in "${files[@]}"; do
             test -s "dist/play-as-krystal/$file"
           done
-      - name: Create installable archive
-        working-directory: dist
-        run: cmake -E tar cf play-as-krystal-all-platforms.zip --format=zip play-as-krystal
-      - name: Upload all-platform archive
-        uses: actions/upload-artifact@v7
-        with:
-          name: play-as-krystal-all-platforms
-          path: dist/play-as-krystal-all-platforms.zip
-          compression-level: 0
-          if-no-files-found: error
       - name: Create all-platform Foxhollow bundle
         working-directory: dist/play-as-krystal
-        run: cmake -E tar cf ../play-as-krystal-all-platforms.fox --format=zip mod.json assets overlay lib README.md LICENSE
+        run: >-
+          cmake -E tar cf ../play-as-krystal-all-platforms.fox
+          --format=zip mod.json assets overlay lib README.md LICENSE
       - name: Upload all-platform Foxhollow bundle
         uses: actions/upload-artifact@v7
         with:

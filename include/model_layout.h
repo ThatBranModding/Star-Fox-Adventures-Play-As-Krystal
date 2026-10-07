@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
+
 typedef struct NativeModelHeader {
     uint8_t refCount;
     uint8_t unk01;
@@ -27,15 +28,19 @@ typedef struct NativeModelHeader {
     uint8_t* hitVolumes;
     uint8_t* collisionTriangles;
     uint8_t* collisionBlocks;
+
     union {
         uint8_t* animationModelPtrs;
         uint8_t** moveData;
     };
+
     uint8_t* animationDataSection;
+
     union {
         uint8_t* animationHeaderBuffer;
         int16_t* cachedAnimIds;
     };
+
     int16_t animGroupBaseIndices[8];
     int32_t animationDataFileOffset;
     int16_t headerSize;
@@ -77,6 +82,7 @@ typedef struct NativeModelHeader {
     uint8_t morphTargetCount;
     uint8_t texMtxCount;
 } NativeModelHeader;
+
 static_assert(sizeof(void*) == 8);
 static_assert(offsetof(NativeModelHeader, cachedAnimIds) == 0xB0);
 static_assert(offsetof(NativeModelHeader, animGroupBaseIndices) == 0xB8);

@@ -26,41 +26,40 @@ extern "C" {
 
 typedef struct FhMod FhMod;
 
-typedef enum FhLogLevel {
-  FH_LOG_INFO = 0,
-  FH_LOG_WARN = 1,
-  FH_LOG_ERROR = 2
-} FhLogLevel;
+typedef enum FhLogLevel { FH_LOG_INFO = 0, FH_LOG_WARN = 1, FH_LOG_ERROR = 2 } FhLogLevel;
 
 typedef enum FhClassSlot {
-  FH_SLOT_02 = 0,
-  FH_SLOT_INIT = 1,
-  FH_SLOT_UPDATE = 2,
-  FH_SLOT_HIT_DETECT = 3,
-  FH_SLOT_RENDER = 4,
-  FH_SLOT_FREE = 5,
-  FH_SLOT_GET_TYPE_ID = 6,
-  FH_SLOT_GET_EXTRA_SIZE = 7
+    FH_SLOT_02 = 0,
+    FH_SLOT_INIT = 1,
+    FH_SLOT_UPDATE = 2,
+    FH_SLOT_HIT_DETECT = 3,
+    FH_SLOT_RENDER = 4,
+    FH_SLOT_FREE = 5,
+    FH_SLOT_GET_TYPE_ID = 6,
+    FH_SLOT_GET_EXTRA_SIZE = 7
 } FhClassSlot;
 
 typedef void (*FhClassCallback)(void);
 
 typedef struct FhModHost {
-  uint32_t structSize;
-  uint32_t abiVersion;
+    uint32_t structSize;
+    uint32_t abiVersion;
 
-  const char* (*modId)(FhMod* mod);
-  const char* (*modDir)(FhMod* mod);
-  void (*log)(FhMod* mod, FhLogLevel level, const char* message);
-  uint64_t (*frameCount)(FhMod* mod);
+    const char* (*modId)(FhMod* mod);
+    const char* (*modDir)(FhMod* mod);
+    void (*log)(FhMod* mod, FhLogLevel level, const char* message);
+    uint64_t (*frameCount)(FhMod* mod);
 
-  uint32_t (*classCount)(FhMod* mod);
-  int (*classReplaceCallback)(FhMod* mod, uint32_t classId, FhClassSlot slot, FhClassCallback replacement,
-                              FhClassCallback* outOriginal);
+    uint32_t (*classCount)(FhMod* mod);
+    int (*classReplaceCallback)(FhMod* mod,
+                                uint32_t classId,
+                                FhClassSlot slot,
+                                FhClassCallback replacement,
+                                FhClassCallback* outOriginal);
 
-  void* (*symbolAddress)(FhMod* mod, const char* name);
-  int (*hookInstall)(FhMod* mod, void* target, void* replacement, void** outOriginal);
-  int (*hookRemove)(FhMod* mod, void* target);
+    void* (*symbolAddress)(FhMod* mod, const char* name);
+    int (*hookInstall)(FhMod* mod, void* target, void* replacement, void** outOriginal);
+    int (*hookRemove)(FhMod* mod, void* target);
 } FhModHost;
 
 typedef int (*FhModInitializeFn)(FhMod* mod, const FhModHost* host);

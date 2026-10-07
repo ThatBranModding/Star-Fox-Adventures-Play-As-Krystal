@@ -1,4 +1,3 @@
-# CMake / Visual Studio build output
 /build/
 /out/
 CMakeCache.txt
@@ -9,7 +8,6 @@ cmake_install.cmake
 *.vcxproj.filters
 *.vcxproj.user
 
-# Compiled binaries
 *.dll
 *.so
 *.dylib
@@ -18,7 +16,6 @@ cmake_install.cmake
 *.exp
 *.lib
 
-# Editor / OS files
 .vs/
 .vscode/
 .idea/
@@ -26,7 +23,6 @@ cmake_install.cmake
 Thumbs.db
 __pycache__/
 
-# Local game image supplied for reference, never part of the mod package.
 /amethyst mod patched rom/
 /research/
 *.iso

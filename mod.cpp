@@ -352,11 +352,11 @@ static bool loadInjectedAssets() {
     const std::string kt = base + "assets" + sep + "kt0";
     if (!readFile(km, g_km0) || !readFile(kt, g_kt0)) {
         log(FH_LOG_ERROR,
-            "Play As Krystal 0.9.7: could not load assets/km0 and assets/kt0 from the installed mod.");
+            "Play As Krystal 1.0.0: could not load assets/km0 and assets/kt0 from the installed mod.");
         return false;
     }
     if (g_km0.size() < 0x38 || be32(g_km0.data()) != 0xFACEFEEDu || g_kt0.size() < 0x100) {
-        log(FH_LOG_ERROR, "Play As Krystal 0.9.7: assets failed format validation.");
+        log(FH_LOG_ERROR, "Play As Krystal 1.0.0: assets failed format validation.");
         g_km0.clear();
         g_kt0.clear();
         return false;
@@ -366,7 +366,7 @@ static bool loadInjectedAssets() {
     std::snprintf(
         buf,
         sizeof(buf),
-        "Play As Krystal 0.9.7: loaded km0 (%zu bytes) and kt0 (%zu bytes) from the mod package.",
+        "Play As Krystal 1.0.0: loaded km0 (%zu bytes) and kt0 (%zu bytes) from the mod package.",
         g_km0.size(),
         g_kt0.size());
     log(FH_LOG_INFO, buf);
@@ -415,7 +415,7 @@ static void loadModelsBinHook(
         if (!g_loggedModel) {
             g_loggedModel = true;
             log(FH_LOG_INFO,
-                "Play As Krystal 0.9.7: model 0x4E8 metadata is now sourced directly from km0.");
+                "Play As Krystal 1.0.0: model 0x4E8 metadata is now sourced directly from km0.");
         }
         return;
     }
@@ -470,7 +470,7 @@ static void tex1GetFrameHook(
     if (!g_loggedTexture) {
         g_loggedTexture = true;
         log(FH_LOG_INFO,
-            "Play As Krystal 0.9.7: Krystal texture metadata is being read directly from the altered kt0.");
+            "Play As Krystal 1.0.0: Krystal texture metadata is being read directly from the altered kt0.");
     }
 }
 
@@ -542,7 +542,7 @@ static void* textureLoadHook(int texId, uint8_t flagIn) {
             std::snprintf(
                 buf,
                 sizeof(buf),
-                "Play As Krystal 0.9.7: Krystal TEX1 request raw=%d slot=0x%X; using private TEX1 bank.",
+                "Play As Krystal 1.0.0: Krystal TEX1 request raw=%d slot=0x%X; using private TEX1 bank.",
                 texId,
                 slot);
             log(FH_LOG_INFO, buf);
@@ -564,7 +564,7 @@ static void* textureLoadHook(int texId, uint8_t flagIn) {
         if (!g_loggedSyntheticTexBank) {
             g_loggedSyntheticTexBank = true;
             log(FH_LOG_INFO,
-                "Play As Krystal 0.9.7: private TEX1 bank active; map TEX1 table left untouched.");
+                "Play As Krystal 1.0.0: private TEX1 bank active; map TEX1 table left untouched.");
         }
         return result;
     }
@@ -576,7 +576,7 @@ static int modelListGetHeaderHook(void* list, int index, void* outHeader) {
         if (!g_loggedCache) {
             g_loggedCache = true;
             log(FH_LOG_INFO,
-                "Play As Krystal 0.9.7: bypassing cached 0x4E8 so the patched km0 model is constructed.");
+                "Play As Krystal 1.0.0: bypassing cached 0x4E8 so the patched km0 model is constructed.");
         }
         return 0;
     }
@@ -767,7 +767,7 @@ static bool copyFoxAnimationMapToKrystal(void* obj) {
     void** banks = *banksField;
     if (!banks || !banks[0] || !banks[1]) {
         log(FH_LOG_ERROR,
-            "Play As Krystal 0.9.7: player model banks 0/1 unavailable after initialization.");
+            "Play As Krystal 1.0.0: player model banks 0/1 unavailable after initialization.");
         return false;
     }
     auto* krystalModel = reinterpret_cast<uint8_t*>(banks[0]);
@@ -779,14 +779,14 @@ static bool copyFoxAnimationMapToKrystal(void* obj) {
     const uint16_t kid = *reinterpret_cast<uint16_t*>(krystalHdr + HDR_MODEL_ID_OFFSET);
     if (kid != KRYSTAL_MODEL_ID) {
         log(FH_LOG_ERROR,
-            "Play As Krystal 0.9.7: injected bank 0 was not model 0x4E8; animation transplant skipped.");
+            "Play As Krystal 1.0.0: injected bank 0 was not model 0x4E8; animation transplant skipped.");
         return false;
     }
     applyFoxAnimationMapping(reinterpret_cast<NativeModelHeader*>(krystalHdr));
     if (!g_loggedAnim) {
         g_loggedAnim = true;
         log(FH_LOG_INFO,
-            "Play As Krystal 0.9.7: copied Fox animation mapping to injected Krystal using native x64 offsets 0xB8/0xB0.");
+            "Play As Krystal 1.0.0: copied Fox animation mapping to injected Krystal using native x64 offsets 0xB8/0xB0.");
     }
     return true;
 }
@@ -944,7 +944,7 @@ extern "C" FH_MOD_EXPORT int fh_mod_initialize(FhMod* mod, const FhModHost* host
     }
     if (!g_getCurrentDataFile || !g_zlbDecompress || !g_setModel || !g_texBankCount ||
         !g_objGetPlayerObject || !g_findSoundTrigger || !g_playObjectSoundEx) {
-        log(FH_LOG_ERROR, "Play As Krystal 0.9.7: required Foxhollow symbols are unavailable.");
+        log(FH_LOG_ERROR, "Play As Krystal 1.0.0: required Foxhollow symbols are unavailable.");
         return FH_MOD_ERROR;
     }
     if (!loadInjectedAssets())
@@ -955,7 +955,7 @@ extern "C" FH_MOD_EXPORT int fh_mod_initialize(FhMod* mod, const FhModHost* host
     do {                                                                                           \
         original = nullptr;                                                                        \
         if (!installHook(sym, reinterpret_cast<void*>(fn), &target, &original)) {                  \
-            log(FH_LOG_ERROR, "Play As Krystal 0.9.7: failed to install required hook: " sym);     \
+            log(FH_LOG_ERROR, "Play As Krystal 1.0.0: failed to install required hook: " sym);     \
             return FH_MOD_ERROR;                                                                   \
         }                                                                                          \
         orig = reinterpret_cast<type>(original);                                                   \
@@ -1105,7 +1105,7 @@ extern "C" FH_MOD_EXPORT int fh_mod_initialize(FhMod* mod, const FhModHost* host
     initializeWallRootMotion();
     initializePortraitSprite();
     log(FH_LOG_INFO,
-        "Play As Krystal  0.9.7 loaded: gameplay/cutscene height 86.5%, chest insertion/dialogue 74%, portal insertion 85% with two-second hold; climbing travel/anchor correction and reliable finish.");
+        "Play As Krystal  1.0.0 loaded: gameplay/cutscene height 86.5%, chest insertion/dialogue 74%, portal insertion 85% with two-second hold; climbing travel/anchor correction and reliable finish.");
     char voiceSummary[192];
     std::snprintf(
         voiceSummary,
@@ -1155,7 +1155,7 @@ extern "C" FH_MOD_EXPORT void fh_mod_update(FhMod*) {
         if (!g_loggedFoxRestoreRedirect) {
             g_loggedFoxRestoreRedirect = true;
             log(FH_LOG_INFO,
-                "Play As Krystal 0.9.7: redirected vanilla Fox model restoration (bank 1) back to Krystal bank 0.");
+                "Play As Krystal 1.0.0: redirected vanilla Fox model restoration (bank 1) back to Krystal bank 0.");
         }
     }
 }

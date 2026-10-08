@@ -751,6 +751,8 @@ static bool playerHasInjectedKrystal(void* obj) {
     return false;
 }
 
+#include "backpack.h"
+
 static void setModelHook(void* obj, int bank) {
     if (bank == 1 && isFoxCampaign() && g_objGetPlayerObject && obj == g_objGetPlayerObject() &&
         playerHasInjectedKrystal(obj))
@@ -950,6 +952,13 @@ extern "C" FH_MOD_EXPORT int fh_mod_initialize(FhMod* mod, const FhModHost* host
     if (!loadInjectedAssets())
         return FH_MOD_ERROR;
 
+    refreshBackpackSetting();
+    g_backpackObject = reinterpret_cast<void**>(host->symbolAddress(mod, "gPlayerEggObject"));
+    if (!g_backpackObject) {
+        log(FH_LOG_ERROR, "Krystal: backpack object symbol unavailable.");
+        return FH_MOD_ERROR;
+    }
+
     void* original = nullptr;
 #define HOOK(sym, fn, target, orig, type)                                                          \
     do {                                                                                           \
@@ -960,6 +969,11 @@ extern "C" FH_MOD_EXPORT int fh_mod_initialize(FhMod* mod, const FhModHost* host
         }                                                                                          \
         orig = reinterpret_cast<type>(original);                                                   \
     } while (0)
+    HOOK("objRenderModelAndHitVolumes",
+         renderObjectModelHook,
+         g_renderObjectModelTarget,
+         g_renderObjectModel,
+         RenderObjectModelFn);
     HOOK("getCurrentDataFile",
          getCurrentDataFileHook,
          g_getCurrentDataFileTarget,
@@ -1169,6 +1183,9 @@ extern "C" FH_MOD_EXPORT void fh_mod_shutdown(FhMod*) {
     notifyKrystalRichPresence(false);
     g_arwingAudioReady = false;
     if (g_host && g_host->hookRemove) {
+        if (g_renderObjectModelTarget) {
+            g_host->hookRemove(g_mod, g_renderObjectModelTarget);
+        }
         if (g_modelReleaseTarget)
             g_host->hookRemove(g_mod, g_modelReleaseTarget);
         if (g_resetAnimationTarget)

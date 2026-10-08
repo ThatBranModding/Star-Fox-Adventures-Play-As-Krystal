@@ -10,6 +10,10 @@ A mod for **Foxhollow**, the native PC port of **Star Fox Adventures**, that let
 - Krystal’s portrait replaces Fox’s on the Moon Mountain Pass and Cape Claw poison meters.
 
 
+## Mod Settings
+
+Requires Foxhollow 1.0.20 or newer. In the launcher's settings for Play As Krystal, turn off **Show Fox Backpack** to hide the backpack. It is enabled by default and can be changed while the game is running.
+
 ## Installation
 
 1. Download the most recent release ZIP.

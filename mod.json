@@ -7,7 +7,17 @@
     "compatibility": {
         "abi": 2,
         "port": {
-            "min": "1.0.19"
+            "min": "1.0.20"
         }
-    }
+    },
+    "optionFields": [
+        {
+            "id": "showBackpack",
+            "type": "toggle",
+            "default": true,
+            "name": "Show Fox Backpack",
+            "label": "Show Fox Backpack",
+            "description": "Show Fox's backpack on Krystal."
+        }
+    ]
 }

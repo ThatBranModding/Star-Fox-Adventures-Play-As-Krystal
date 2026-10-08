@@ -60,6 +60,7 @@ typedef struct FhModHost {
     void* (*symbolAddress)(FhMod* mod, const char* name);
     int (*hookInstall)(FhMod* mod, void* target, void* replacement, void** outOriginal);
     int (*hookRemove)(FhMod* mod, void* target);
+    int (*configBool)(FhMod* mod, const char* key, int fallback);
 } FhModHost;
 
 typedef int (*FhModInitializeFn)(FhMod* mod, const FhModHost* host);

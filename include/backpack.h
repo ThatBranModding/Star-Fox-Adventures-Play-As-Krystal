@@ -1,6 +1,6 @@
 #pragma once
 
-using RenderObjectModelFn = void (*)(void*, int, int, int, int, float);
+using RenderObjectModelFn = void (*)(void*);
 
 static bool g_showBackpack = true;
 static void** g_backpackObject{};
@@ -16,17 +16,24 @@ static void refreshBackpackSetting() {
     }
 }
 
-static void renderObjectModelHook(void* obj, int a, int b, int c, int d, float scale) {
+static void renderObjectModelHook(void* obj) {
     if (!g_showBackpack && obj && g_backpackObject && obj == *g_backpackObject && isFoxCampaign() &&
         g_objGetPlayerObject) {
         void* player = g_objGetPlayerObject();
         if (player && playerHasInjectedKrystal(player) &&
             static_cast<uint8_t*>(player)[OBJ_BANK_INDEX_OFFSET] == 0) {
+            auto* scale = reinterpret_cast<float*>(static_cast<uint8_t*>(obj) + 0x08);
+            const float savedScale = *scale;
+            *scale = 0.0f;
+            if (g_renderObjectModel) {
+                g_renderObjectModel(obj);
+            }
+            *scale = savedScale;
             return;
         }
     }
     if (g_renderObjectModel) {
-        g_renderObjectModel(obj, a, b, c, d, scale);
+        g_renderObjectModel(obj);
     }
 }
 

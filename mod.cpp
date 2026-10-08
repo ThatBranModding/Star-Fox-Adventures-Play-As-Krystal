@@ -969,7 +969,7 @@ extern "C" FH_MOD_EXPORT int fh_mod_initialize(FhMod* mod, const FhModHost* host
         }                                                                                          \
         orig = reinterpret_cast<type>(original);                                                   \
     } while (0)
-    HOOK("objRenderModelAndHitVolumes",
+    HOOK("objRenderModel",
          renderObjectModelHook,
          g_renderObjectModelTarget,
          g_renderObjectModel,
